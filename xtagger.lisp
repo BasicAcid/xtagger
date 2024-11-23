@@ -7,7 +7,7 @@
 
 (in-package :xattr-lister)
 
-(ql:quickload '(:cffi :cl-fad :babel :cl-ppcre))
+(ql:quickload :cffi)
 (use-package :cffi)
 
 (define-foreign-library libc
@@ -28,7 +28,7 @@
 
 ;; Get list of xattr names for a file.
 (defun get-xattr-names (path)
-  (with-foreign-pointer (buf 1024) ; Adjust buffer size if needed.
+  (with-foreign-pointer (buf 1024)
                         (let ((len (%llistxattr path buf 1024)))
                           (when (plusp len)
                             (let ((names (make-string-output-stream)))
@@ -44,27 +44,30 @@
   (with-foreign-pointer (buf 1024)
                         (let ((len (%lgetxattr path name buf 1024)))
                           (when (plusp len)
-                            (let ((value (make-array len :element-type '(unsigned-byte 8))))
+                            (let ((value (make-string len)))
                               (loop for i from 0 below len
-                                    do (setf (aref value i) (mem-ref buf :unsigned-char i)))
+                                    do (setf (char value i)
+                                             (code-char (mem-ref buf :unsigned-char i))))
                               value)))))
-
-;; Convert byte array to string
-(defun bytes-to-string (bytes)
-  (when bytes
-    (babel:octets-to-string bytes)))
 
 ;; Default tag attribute used by KDE Dolphin.
 (defparameter *default-tag-attr* "user.xdg.tags")
 
+;; Simple string split function to replace cl-ppcre.
+(defun split-string (string delimiter)
+  (loop for start = 0 then (1+ end)
+        for end = (position delimiter string :start start)
+        collect (string-trim " " (subseq string start end))
+        until (null end)))
+
 ;; Parse tags from KDE Dolphin format.
 (defun parse-tags (tag-string)
   (when tag-string
-    (cl-ppcre:split "," tag-string)))
+    (split-string tag-string #\,)))
 
 ;; Check if a file has a specific tag.
 (defun file-has-tag-p (path tag-name)
-  (let* ((tags-value (bytes-to-string (get-xattr-value path *default-tag-attr*)))
+  (let* ((tags-value (get-xattr-value path *default-tag-attr*))
          (file-tags (parse-tags tags-value)))
     (member tag-name file-tags :test #'string=)))
 
@@ -76,13 +79,23 @@
       (dolist (name names)
         (let ((value (get-xattr-value path name)))
           (when value
-            (format t "  ~A = ~A~%" name (bytes-to-string value))))))))
+            (format t "  ~A = ~A~%" name value)))))))
+
+;; Directory exists check without cl-fad.
+(defun directory-exists-p (path)
+  (let ((truename (probe-file path)))
+    (and truename (directory-pathname-p truename))))
+
+;; Check if pathname points to a directory.
+(defun directory-pathname-p (path)
+  (let ((name (file-namestring path)))
+    (or (null name) (string= name "") (string= name "/"))))
 
 ;; Recursive directory traversal.
 (defun walk-directory (directory fn)
   (labels ((walk (name)
                  (cond
-                  ((not (cl-fad:directory-exists-p name))
+                  ((not (directory-exists-p name))
                    (funcall fn name))
                   (t
                    (dolist (x (directory (merge-pathnames "*.*" name)))

@@ -20,9 +20,6 @@ line.
 - Quicklisp
 - Required libraries:
   - cffi
-  - cl-fad
-  - babel
-  - cl-ppcre
 
 ## Installation
 
@@ -30,7 +27,7 @@ line.
 
 2. Clone or download this repository:
    ```bash
-   git clone [repository-url]
+   git clone git@github.com:BasicAcid/xtagger.git
    cd xtagger
    ```
 
@@ -100,7 +97,7 @@ If directory is not specified, TAGGER_PATH environment variable will be used.
 You can also use the functions directly from a Common Lisp REPL:
 
 ```lisp
-(ql:quickload '(:cffi :cl-fad :babel :cl-ppcre))
+(ql:quickload '(:cffi))
 (load "xtagger.lisp")
 
 ;; Find files with specific tag
